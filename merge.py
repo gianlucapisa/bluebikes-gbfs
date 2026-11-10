@@ -38,11 +38,25 @@ df["hour"] = df["ts_local"].dt.hour
 df["empty"] = (df["num_bikes_available"] == 0) | (df["is_renting"] == 0)
 df["full"] = (df["num_docks_available"] == 0) | (df["is_returning"] == 0)
 
+# Time weights: each observation counts for the time until the station's next
+# observation, capped at MAX_GAP so a hole in the data doesn't count as hours
+# of "empty" or "full". Plain means would overweight periods with more snapshots.
+MAX_GAP = 600  # seconds (2 x the 5-minute interval)
+df = df.sort_values(["station_id", "snapshot_utc"])
+nxt = df.groupby("station_id")["snapshot_utc"].shift(-1)
+df["w"] = ((nxt - df["snapshot_utc"]).dt.total_seconds()
+           .clip(upper=MAX_GAP).fillna(300))
+df["w_empty"] = df["w"] * df["empty"]
+df["w_full"] = df["w"] * df["full"]
+
 tau = (df.groupby(["station_id", "dow", "hour"])
          .agg(n_snap=("empty", "size"),
-              share_empty=("empty", "mean"),
-              share_full=("full", "mean"))
+              minutes_obs=("w", lambda s: s.sum() / 60),
+              w=("w", "sum"), w_empty=("w_empty", "sum"), w_full=("w_full", "sum"))
          .reset_index())
+tau["share_empty"] = tau["w_empty"] / tau["w"]
+tau["share_full"] = tau["w_full"] / tau["w"]
+tau = tau.drop(columns=["w", "w_empty", "w_full"])
 tau["share_available"] = 1 - tau["share_empty"]
 tau.to_csv(OUT / "tau_station_dow_hour.csv", index=False)
 print(f"wrote {OUT / 'tau_station_dow_hour.csv'}")
