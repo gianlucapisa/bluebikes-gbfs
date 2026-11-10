@@ -116,6 +116,8 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--count", type=int, default=1, help="number of snapshots")
     ap.add_argument("--interval", type=int, default=300, help="seconds between snapshots")
+    ap.add_argument("--align", action="store_true",
+                    help="take each snapshot on a multiple of --interval (e.g. :00, :05, :10 UTC)")
     a = ap.parse_args()
 
     try:
@@ -125,13 +127,18 @@ def main():
 
     ok = 0
     for i in range(a.count):
+        if a.align:
+            # sleep until the next clock tick that is a multiple of the interval, so
+            # snapshots from different runs fall on the same grid (no drift)
+            now = time.time()
+            time.sleep((-now) % a.interval)
         t0 = time.time()
         try:
             snapshot_status()
             ok += 1
         except Exception as e:
             log(f"snapshot {i + 1} failed: {e!r}")  # keep going
-        if i < a.count - 1:
+        if not a.align and i < a.count - 1:
             time.sleep(max(0, a.interval - (time.time() - t0)))
 
     log(f"done: {ok}/{a.count} snapshots ok")
