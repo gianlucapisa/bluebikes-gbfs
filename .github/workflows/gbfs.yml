@@ -2,7 +2,7 @@ name: gbfs-logger
 
 on:
   schedule:
-    - cron: "4-59/15 * * * *"
+    - cron: "4,19,34,49 * * * *"
   workflow_dispatch: {}
 
 permissions:
