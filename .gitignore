@@ -1,0 +1,4 @@
+# everything in out/ is rebuilt locally in a few seconds: python build_all.py
+out/
+data/**/*.tmp
+__pycache__/

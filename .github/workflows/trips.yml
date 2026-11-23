@@ -1,0 +1,57 @@
+name: trips-monthly
+
+# Bluebikes publishes last month's trips somewhere between the 4th and the 10th.
+# Check once a day on days 3-14; runs where nothing new is published finish in seconds
+# without committing. Run by hand: Actions -> trips-monthly -> Run workflow.
+
+on:
+  schedule:
+    - cron: "41 15 3-14 * *"
+  workflow_dispatch:
+    inputs:
+      since:
+        description: "first month to fetch (YYYYMM); empty = last 12 months"
+        required: false
+        default: ""
+
+permissions:
+  contents: write
+
+concurrency:
+  group: trips-monthly
+  cancel-in-progress: false
+
+jobs:
+  fetch:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+
+      - run: pip install -r requirements.txt
+
+      - name: Download new months
+        run: |
+          if [ -n "${{ inputs.since }}" ]; then
+            python fetch_trips.py --since "${{ inputs.since }}"
+          else
+            python fetch_trips.py
+          fi
+
+      - name: Commit
+        run: |
+          git config user.name  "gbfs-bot"
+          git config user.email "gbfs-bot@users.noreply.github.com"
+          git add data/trips
+          if git diff --cached --quiet; then echo "no new months"; exit 0; fi
+          git commit -q -m "trips $(ls data/trips | tail -1 | cut -c1-6)"
+          # the 5-minute logger pushes often, so rebase and retry
+          for i in 1 2 3 4 5; do
+            git pull --rebase -q && git push -q && exit 0
+            sleep $((RANDOM % 20 + 5))
+          done
+          echo "::error::push failed after 5 tries"; exit 1
