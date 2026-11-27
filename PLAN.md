@@ -146,7 +146,7 @@ Each decision has the reason behind it. If you want to change one, change it her
 | D20 | **Distances: straight-line × 1.3 for the first version; real OSRM road times as an early upgrade** | The bridges over the Charles matter for routing, and the upgrade is cheap (download once, save in the repo) |
 | D21 | **School flag:** 1 on weekdays during term: Fall 2025 (→ Dec 19, 2025), Spring 2026 (Jan 20 → May 15), Fall 2026 (Sep 2 → Dec 18); 0 during winter and summer breaks. Check against MIT/BU calendars | Students are a big share of Boston riders. A shared flag captures season better than month dummies with only 12 months of data |
 | D22 | **Timeline:** first end-to-end version by Sun Nov 29, freeze Thu Dec 3, write Dec 4–6, submit Mon Dec 7. Upgrades are optional and dropped if late | Section 11 |
-| D23 ⚠️ | **Add back hidden demand in the replay (in the first version)**: in 5-minute steps when the real station was empty (or full), add the pickups (or returns) that riders typically attempt at that station and hour. **Needs your confirmation**, see Section 5.4 | Without it, Bluebikes' policy scores ~0 failures by construction and benchmark (i) is meaningless |
+| D23 | **Add back hidden demand in the replay (in the first version)**: in 5-minute steps when the real station was empty (or full), add the pickups (or returns) that riders typically attempt at that station and hour. Confirmed 11-27. The proper method (censored likelihood, Section 5.4) is an upgrade once November's trips arrive | Without it, Bluebikes' policy scores ~0 failures by construction and benchmark (i) is meaningless |
 | D24 | **Tools:** Python, pandas, `scipy.optimize.linprog` (HiGHS solver) for the LP. Add `scipy` to `requirements.txt` | Free, no licence, works with what we already use |
 
 ---
@@ -344,7 +344,7 @@ For each station, starting from `x = start_i`, apply the 48 cleaned 5-minute cha
 - if `x < 0`: **failed pickups += −x**, then `x = 0`
 - if `x > C_i`: **failed returns += x − C_i**, then `x = C_i`
 
-### 5.4 ⚠️ Hidden demand in the replay (D23, needs confirmation)
+### 5.4 Hidden demand in the replay (D23, confirmed 11-27)
 **The problem.** The flows we replay were produced under Bluebikes' real inventories. When a real
 station was empty, would-be riders left and **left no trace** in the logs. So replaying Bluebikes'
 own starting point reproduces the real morning exactly and shows about **zero failures by
@@ -366,6 +366,14 @@ Use the censoring-corrected rate once Section 4.4 is done. Likewise, when the re
 This makes the comparison fair, and it's the PDF's censoring idea applied to the test. It needs
 only trips + logs separately (typical rates from trips, empty/full moments from logs), so the missing overlap doesn't matter.
 
+**The proper method (upgrade, needs November's trips):** a **censored likelihood** per station × hour.
+Assume pickups in an hour follow a distribution (e.g. Poisson with rate λ). Hours where the station
+**still had bikes** contribute `P(X = x)` (observed pickups = true demand); hours where it **hit zero**
+contribute the survival term `P(X ≥ x)` (demand was at least what was served). Maximizing the
+likelihood gives an unbiased λ. Same for returns with "full". This needs pickups (trips) **and**
+empty/not-empty status (logs) for the **same hours**, so it becomes possible only when November's trips
+are published. Until then we use typical rates (above) and the ×3-capped ratio correction (4.4).
+
 **Limitation that remains:** the logs still can't see offsetting events inside 5 minutes
 (2 pickups + 2 returns look like 0). Absolute failure counts are approximate; comparisons between policies are what matter.
 
@@ -380,7 +388,7 @@ only trips + logs separately (typical rates from trips, empty/full moments from 
 ### 5.6 Bonus if November's trips arrive before Dec 7
 - Re-check the 8-bike threshold: compare each removed jump with the trips in the same 5 minutes at that station.
 - Re-score with trip-based flows for Nov 17–30.
-- Redo the censoring correction with matched days.
+- Redo the censoring correction with matched days, using the censored likelihood (5.4) instead of the ratio correction.
 
 ---
 
@@ -499,7 +507,7 @@ These go in the report, most of them in "how we tackled it" and "another week".
   range show where daytime rebalancing or more docks are needed.
 - Weekends.
 - Gradient boosting / pooled forecasting model across stations.
-- Proper censoring correction and validation with November trips.
+- Proper censoring correction with a censored likelihood (Poisson, survival term for hours that hit zero/full) and validation with November trips.
 - Separate pickups and returns in the forecast instead of net flow.
 - Other cities (NYC Citi Bike uses the same GBFS format).
 
@@ -541,8 +549,8 @@ Tick with `- [x]` and add `(done MM-DD, Name)`. Dates are targets.
 - [x] Van-move threshold analysis → 8 bikes / 5 min (done 11-27)
 - [x] Valet rule applied → Ames/Main, Longwood/Binney (done 11-27)
 
-### Decision still open
-- [ ] **Confirm D23** (hidden demand added back in the replay, Section 5.4)
+### Decisions confirmed after the plan was written
+- [x] **Confirm D23** (hidden demand added back in the replay, Section 5.4) (done 11-27, Gianluca)
 
 ### Phase 1: first end-to-end version (target Sun Nov 29)
 - [ ] Add `scipy` to `requirements.txt`; create `model/` and `model/config.py` with all base-case parameters
